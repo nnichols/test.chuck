@@ -243,7 +243,7 @@ The `for-all` macro is intended to be used with
     (is (> x 0))))
 ```
 
-More details in [this blog post](http://blog.colinwilliams.name/clojure/testing/2015/01/26/alternative-clojure-dot-test-integration-with-test-dot-check.html).
+More details in [this blog post](https://web.archive.org/web/20240718074001/https://blog.colinwilliams.name/clojure/testing/2015/01/26/alternative-clojure-dot-test-integration-with-test-dot-check.html).
 
 
 ## Contributing
