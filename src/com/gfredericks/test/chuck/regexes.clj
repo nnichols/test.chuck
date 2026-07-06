@@ -243,10 +243,11 @@
                                    {:type ::parse-error
                                     :character-name s}))))
 
-    ;; ^, \A, \G assert start-of-input; $, \Z, \z assert end-of-input;
-    ;; \b, \B are word boundaries. We record the kind but still mark the
-    ;; node unsupported; resolve-edge-anchors clears the start/end anchors
-    ;; that sit at the edges of the match, where they're no-ops.
+    ;; ^, \A, \G assert start-of-input;
+    ;; $, \Z, \z assert end-of-input;
+    ;; \b, \B are word boundaries.
+    ;; We record the kind but still mark the node unsupported;
+    ;; `resolve-edge-anchors` clear start/end anchors that sit at the edges of the match, where they're no-ops.
     :Anchor (fn [& cs]
               (let [kind (case (last cs)
                            ("^" "A" "G") :start
@@ -581,11 +582,9 @@
                    :patches? "welcome."})))
 
 (defn ^:private edge-anchor->empty
-  "Rewrites a concatenation's leading start-anchor and trailing
-  end-anchor to empty-string nodes, which is what an anchor at the edge
-  of the match means under re-matches. Anchors in any other position,
-  and word-boundary anchors, are left alone so they still report as
-  unsupported."
+  "Rewrites leading start-anchor and trailing end-anchor to empty-string nodes.
+   Anchors in any other position, and word-boundary anchors, are left alone.
+   They still report as unsupported as of this change."
   [m]
   (if (= :concatenation (:type m))
     (let [els (vec (:elements m))
@@ -602,9 +601,8 @@
     m))
 
 (defn ^:private resolve-edge-anchors
-  "Rewrites edge-positioned start/end anchors in each top-level
-  concatenation of the analyzed tree (a root :alternation) to
-  empty-string nodes, leaving everything else untouched."
+  "Rewrites start/end anchors at the edges of strings to empty-string nodes.
+   All other nodes are unmodified."
   [analyzed]
   (if (= :alternation (:type analyzed))
     (update analyzed :elements #(map edge-anchor->empty %))
