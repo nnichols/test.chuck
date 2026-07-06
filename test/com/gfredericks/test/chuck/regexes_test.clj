@@ -176,7 +176,12 @@
 
    ;; tests strange behavior in the QE-unquoter related to initial
    ;; digits
-   "\\c\\Q0" "[^\\x{2f498}]"])
+   "\\c\\Q0" "[^\\x{2f498}]"
+
+   ;; edge anchors are no-ops under re-matches
+   "^abc" "abc$" "^abc$" "\\Aabc\\z" "\\Gabc" "abc\\Z" "^abc|def$"
+   ;; degenerate anchors match only the empty string
+   "^" "$" "^$"])
 
 (defspec generator-regression-spec (times 1000)
   (prop/for-all [[re s] (gen'/for [re-s (gen/elements generator-regression-cases)
@@ -194,3 +199,14 @@
                     (throw e))))
        "[&&x]" "[x&&]" "[^[x]]" "[^[x]x]" "[a&&&b]" "[x&&&&y]"
        "[^{}&&&]" "[x&&&&]" "[x&&&&&]"))
+
+(deftest anchors-unsupported
+  ;; anchors only generate at the edges of the match (those cases live
+  ;; in generator-regression-cases); word boundaries, and anchors in
+  ;; any other position, are still unsupported
+  (are [s] (try (-> s re-pattern regexes/gen-string-from-regex)
+                false
+                (catch clojure.lang.ExceptionInfo e
+                  (= :anchors (:feature (ex-data e)))))
+       "\\babc" "\\Babc" "a^b" "$abc" "abc^" "abc\\G"
+       "(^)*abc" "a?^b" "(?:^abc)"))

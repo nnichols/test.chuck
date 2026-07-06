@@ -243,8 +243,19 @@
                                    {:type ::parse-error
                                     :character-name s}))))
 
-    ;; sounds super tricky. looking forward to investigating
-    :Anchor (constantly (unsupported :anchors))
+    ;; ^, \A, \G assert start-of-input; $, \Z, \z assert end-of-input;
+    ;; \b, \B are word boundaries. We record the kind but still mark the
+    ;; node unsupported; resolve-edge-anchors clears the start/end anchors
+    ;; that sit at the edges of the match, where they're no-ops.
+    :Anchor (fn [& cs]
+              (let [kind (case (last cs)
+                           ("^" "A" "G") :start
+                           ("$" "Z" "z") :end
+                           ("b" "B") :word-boundary)]
+                {:type :anchor
+                 :kind kind
+                 :symbol (apply str cs)
+                 :unsupported #{:anchors}}))
 
     :Dot (constantly {:type :class, :simple-class :dot})
     :SpecialCharClass (fn [[c]]
@@ -522,6 +533,10 @@
   {:pre [character]}
   (gen/return (str character)))
 
+(defmethod analyzed->generator :empty
+  [_]
+  (gen/return ""))
+
 (defmethod analyzed->generator :large-unicode-character
   [{:keys [code-point]}]
   (gen/return (large-unicode-character->string code-point)))
@@ -565,6 +580,36 @@
                    :feature feature
                    :patches? "welcome."})))
 
+(defn ^:private edge-anchor->empty
+  "Rewrites a concatenation's leading start-anchor and trailing
+  end-anchor to empty-string nodes, which is what an anchor at the edge
+  of the match means under re-matches. Anchors in any other position,
+  and word-boundary anchors, are left alone so they still report as
+  unsupported."
+  [m]
+  (if (= :concatenation (:type m))
+    (let [els (vec (:elements m))
+          n (count els)
+          start? #(and (= :anchor (:type %)) (= :start (:kind %)))
+          end? #(and (= :anchor (:type %)) (= :end (:kind %)))]
+      (assoc m :elements
+             (cond-> els
+               (and (pos? n) (start? (first els)))
+               (assoc 0 {:type :empty})
+
+               (and (pos? n) (end? (peek els)))
+               (assoc (dec n) {:type :empty}))))
+    m))
+
+(defn ^:private resolve-edge-anchors
+  "Rewrites edge-positioned start/end anchors in each top-level
+  concatenation of the analyzed tree (a root :alternation) to
+  empty-string nodes, leaving everything else untouched."
+  [analyzed]
+  (if (= :alternation (:type analyzed))
+    (update analyzed :elements #(map edge-anchor->empty %))
+    analyzed))
+
 (defn gen-string-from-regex
   "Takes a regex and returns a generator for strings that match it."
   [^java.util.regex.Pattern re]
@@ -574,7 +619,7 @@
     (throw (ex-info "Unsupported feature"
                     {:type ::unsupported-feature
                      :feature "flags"})))
-  (let [analyzed (-> re str parse)
+  (let [analyzed (-> re str parse resolve-edge-anchors)
         parser-input (::instaparse-input (meta analyzed))]
     (doseq [m (analysis-tree-seq analyzed)]
       (when-let [[x] (seq (:unsupported m))]
